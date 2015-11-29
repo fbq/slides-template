@@ -1,0 +1,160 @@
+%\documentclass{beamer}
+\documentclass[handout]{beamer}
+%\usepackage{verbatim}
+%\usepackage{tikz}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{ulem}
+\usepackage{fontspec}
+
+\usetheme{Boadilla} %for 16:9
+%\usetheme{Madrid} %for 4:3
+\setmainfont{Source Sans Pro}
+\setmonofont{Monaco}
+\setsansfont{Source Sans Pro}
+
+%\setmainfont{Monaco}
+\title{Template Title}
+\author{Boqun Feng}
+\institute{University of Template, Beamer Department}
+\date{\today{}}
+\begin{document}
+
+\lstset{
+    numbers=left,
+    numberstyle=\tiny,
+    keywordstyle=\color{blue!70}, commentstyle=\color{red!50!green!50!blue!50},
+    frame=single,
+    rulesepcolor=\color{red!20!green!20!blue!20},
+    language={[ANSI]C},
+    basicstyle=\tiny\ttfamily,
+    xleftmargin=1.5em,xrightmargin=0.5em,
+    emphstyle=\color{red},
+    stepnumber=1,
+    firstnumber=1,
+    numberfirstline=true,
+    numbersep=-1em,
+    escapechar=`,
+}
+
+\definecolor{light-gray}{gray}{0.80}
+
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Agenda}
+\tableofcontents
+\end{frame}
+
+\AtBeginSection[]
+{
+    \begin{frame}
+        \frametitle{\inserttitle}       %% using \insertitle to avoid typing the title again.
+        \tableofcontents[
+            currentsection,
+            hideallsubsections          %% hide all subsections for overview
+        ]
+    \end{frame}
+}
+
+\AtBeginSubsection[]
+{
+    \begin{frame}
+        \frametitle{\insertsection}
+        \tableofcontents[
+            currentsubsection,
+            sectionstyle=hide/hide,             %% <action for current section>/<other sections>
+            subsectionstyle=show/shaded/hide]   %% <action for current sub>/<other subs(but in the same sections)>/<other else subs>
+    \end{frame}
+}
+
+\section{Section 1}
+\subsection{Section 1.1}
+\begin{frame}[fragile]{What is RCU?}
+    a \textbf{\color{red}lock}->rwlock->RCU case:
+    \begin{lstlisting}[firstline=1]
+    struct data {
+        int a;
+    };
+
+    struct data *gp = NULL;
+    spinlock_t lock;
+
+    void read()                           void update(int a)
+    {                                     {
+        struct data *p;                       struct data *p;
+        spin_lock(&lock);                     spin_lock(&lock);
+        p = gp;                               p = gp;
+        if (p)                                if (!p) {
+            do_something_with(p->a);              p = kmalloc(sizeof(*p));
+        spin_unlock(&lock);                       gp = p;
+    }                                         }
+                                              p->a = a;
+                                              spin_unlock(&lock);
+                                          }
+    \end{lstlisting}
+    Reader/Writer blocks reader/writer.
+\end{frame}
+
+\subsection{Section 1.1}
+\begin{frame}[fragile]{What is RCU? (cont.)}
+    a lock->\textbf{\color{red}rwlock}->RCU case:
+    \begin{lstlisting}[emph={rwlock_t, read_lock, read_unlock, write_lock, write_unlock}]
+    struct data {
+        int a;
+    };
+
+    struct data *gp = NULL;
+    rwlock_t rwlock;
+
+    void read()                           void update(int a)
+    {                                     {
+        struct data *p;                       struct data *p;
+        read_lock(&lock);                     write_lock(&lock);
+        p = gp;                               p = gp;
+        if (p)                                if (!p) {
+            do_something_with(p->a);              p = kmalloc(sizeof(*p));
+        read_unlock(&lock);                       gp = p;
+    }                                         }
+                                              p->a = a;
+                                              write_unlock(&lock);
+                                          }
+    \end{lstlisting}
+    Reader doesn't blocks reader.
+\end{frame}
+
+\subsection{Section 1.1}
+\begin{frame}[fragile]{What is RCU? (cont.)}
+    a lock->rwlock->\textbf{\color{red}RCU} case:
+    \begin{lstlisting}[emph={rcu_read_lock,rcu_read_unlock,synchronize_rcu}]
+    struct data {
+        int a;
+    };
+
+    spinlock_t update_lock;
+    struct data *gp = NULL;
+
+    void read()                           void update(int a)
+    {                                     {
+        struct data *p;                       struct data *p, *old_p;
+        rcu_read_lock();                      p = kmalloc(sizeof(*p)); // new struct
+        p = `\color{green!80!black}rcu\_dereference`(gp);              p->a = a;
+        if (p)                                spin_lock(&update_lock);
+            do_something_with(p->a);          old_p = gp;
+        rcu_read_unlock();                    `\color{green!80!black}rcu\_assign\_pointer`(gp, p);
+    }                                         spin_unlock(&update_lock);
+                                              synchronize_rcu();
+                                              kfree(old_p);            // free old
+                                          }
+    \end{lstlisting}
+    Reader doesn't block reader/writer, and writer doesn't block reader.
+\end{frame}
+\section{Section 2}
+\section{Section 3}
+\subsection{subsection 3.1}
+\frame{\insertsubsection}{place holder}
+\begin{frame}{Q \& A}
+    Thank you!
+\end{frame}
+\end{document}
